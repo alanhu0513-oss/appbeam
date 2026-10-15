@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { credentialHeaders } from "@/lib/api";
+import { credentialHeaders, sessionHeader } from "@/lib/api";
 import type { PatchPipelineResult } from "@appbeam/pipeline/types";
 
 interface ChatMessage {
@@ -58,6 +58,7 @@ export default function PatchChat({
         headers: {
           "Content-Type": "application/json",
           ...credentialHeaders(),
+          ...sessionHeader(),
         },
         body: JSON.stringify({
           request,

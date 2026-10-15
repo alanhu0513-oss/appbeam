@@ -9,6 +9,10 @@ import {
   runPipeline,
 } from "@appbeam/pipeline";
 import type { PipelineEvent, PipelineResult } from "@appbeam/pipeline/types";
+import {
+  parseSessionId,
+  saveSessionCode,
+} from "@/lib/server/sessions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -82,6 +86,11 @@ export async function POST(req: Request): Promise<Response> {
     return json({ error: "Provide a binary file or an app URL" }, 400);
   }
 
+  // Session-scoped visitors: keep their generated code server-side so the
+  // patch loop + export resolve their app, and always deploy from a staged
+  // per-run copy so concurrent users never touch the shared template.
+  const sessionId = parseSessionId(req.headers.get("x-appbeam-session"));
+
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -91,9 +100,17 @@ export async function POST(req: Request): Promise<Response> {
       try {
         const result = await runPipeline({
           target: target!,
-          config: extractCredentialOverrides(req.headers),
+          config: {
+            ...extractCredentialOverrides(req.headers),
+            ...(sessionId ? { staging: true } : {}),
+          },
           onEvent: (event) => send({ type: "event", event }),
         });
+        if (sessionId) {
+          await saveSessionCode(sessionId, result.inference.code).catch(
+            () => undefined,
+          );
+        }
         send({ type: "done", result });
       } catch (err) {
         send({

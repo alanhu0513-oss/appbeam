@@ -1,5 +1,10 @@
 import { extractCredentialOverrides, runPatchPipeline } from "@appbeam/pipeline";
 import type { PatchPipelineResult } from "@appbeam/pipeline/types";
+import {
+  parseSessionId,
+  readSessionCode,
+  saveSessionCode,
+} from "@/lib/server/sessions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,6 +46,9 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
 
+  // Code resolution order: request body → the visitor's session copy →
+  // the template entry (single-user fallback).
+  const sessionId = parseSessionId(req.headers.get("x-appbeam-session"));
   let code: string | undefined;
   if (body.code !== undefined && body.code !== null) {
     if (typeof body.code !== "string") {
@@ -51,13 +59,22 @@ export async function POST(req: Request): Promise<Response> {
     }
     code = body.code.trim() ? body.code : undefined;
   }
+  if (!code && sessionId) {
+    code = (await readSessionCode(sessionId)) ?? undefined;
+  }
 
   try {
     const result: PatchPipelineResult = await runPatchPipeline({
       code,
       request,
-      config: extractCredentialOverrides(req.headers),
+      config: {
+        ...extractCredentialOverrides(req.headers),
+        ...(sessionId ? { staging: true } : {}),
+      },
     });
+    if (sessionId) {
+      await saveSessionCode(sessionId, result.code).catch(() => undefined);
+    }
     return json(result);
   } catch (err) {
     return json(

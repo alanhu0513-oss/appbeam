@@ -107,9 +107,29 @@ docker compose run pipeline simulate /workspace/app.apk   # files from ./samples
 - **API mocking by default** — generated apps intercept recovered
   `fetch`/`axios` calls behind an in-file mock layer, so buttons backed by
   third-party REST endpoints render realistic data instead of failing.
-- **Export project** — the nav-bar **⬇ export project** button streams the
-  current `apps/simulator-template` (patched `App.tsx` included) as a clean
+- **Export project** — the nav-bar **⬇ export project** button streams your
+  Expo project (patched `App.tsx` overlaid on the template) as a clean
   `.zip`; unpack it and run `npx expo start` or `npm run web`.
+
+### Hosting a public instance
+
+The platform is designed for open-source hosting where **every visitor
+brings their own API keys**:
+
+- Leave the server `.env` **empty** — visitors paste their `GEMINI_API_KEY` /
+  `VERCEL_AUTH_TOKEN` in the Settings panel; they travel as per-request
+  headers (`x-gemini-key`, `x-vercel-token`) and are never persisted
+  server-side. With no server keys, missing visitor keys degrade to mock
+  mode instead of spending the host's quota.
+- Each browser gets a random session id (localStorage, `x-appbeam-session`).
+  The visitor's last generated `App.tsx` is kept server-side for 24h so the
+  patch loop and export zip always resolve *their* app — never another
+  visitor's.
+- Dashboard runs deploy from **staged per-run copies** of the template
+  (the shared `apps/simulator-template` directory is never mutated), so
+  concurrent visitors cannot race or read each other's code.
+- TLS and rate limiting are the host's job — deploy behind Vercel, Fly, or
+  a reverse proxy with quotas.
 
 ## Configure the Google Gemini API key
 
@@ -241,9 +261,10 @@ curl -OJ http://localhost:3000/api/export
 ## Limitations & roadmap
 
 - **Gemini 1.5 Pro retirement** — default model is env-overridable (see above).
-- **Shared template file** — in-place injection means concurrent runs collide;
-  set `PIPELINE_STAGING=1` for per-run copies (deployments themselves are
-  immutable, so Vercel side-effects stay isolated).
+- **CLI injection is in-place** — the dashboard always uses staged per-run
+  copies (session-isolated), but `pnpm run pipeline simulate` still mutates
+  the shared template unless you pass `--staging` (or `PIPELINE_STAGING=1`);
+  concurrent CLI runs can collide.
 - **REA depth** — deep native analysis requires a local provider and, on macOS,
   Hopper/Ghidra/IDA; CI images only cover the static analysis paths.
 - **Single-entry injection** — the generated `App.tsx` replaces one file; multi-file

@@ -4,10 +4,11 @@ import { useEffect, useState } from "react";
 
 import ApiConfig from "@/components/ApiConfig";
 import Dropzone, { type SubmitPayload } from "@/components/Dropzone";
+import ExportButton from "@/components/ExportButton";
 import PatchChat from "@/components/PatchChat";
 import PhoneFrame from "@/components/PhoneFrame";
 import StageTimeline from "@/components/StageTimeline";
-import { CREDENTIALS_EVENT, credentialHeaders } from "@/lib/api";
+import { CREDENTIALS_EVENT, credentialHeaders, sessionHeader } from "@/lib/api";
 import type { PipelineEvent, PipelineResult } from "@appbeam/pipeline/types";
 
 interface ConfigInfo {
@@ -120,7 +121,7 @@ export default function Home() {
       const res = await fetch("/api/simulate", {
         method: "POST",
         body: form,
-        headers: credentialHeaders(),
+        headers: { ...credentialHeaders(), ...sessionHeader() },
       });
       if (!res.ok || !res.body) {
         const payload = (await res.json().catch(() => null)) as
@@ -207,13 +208,7 @@ export default function Home() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <a
-              className="ghost-btn"
-              href="/api/export"
-              title="Download the generated Expo project as a .zip — unpack and run npx expo start"
-            >
-              ⬇ export project
-            </a>
+            <ExportButton />
             <div className="hidden items-center gap-2 sm:flex">
               <span className="label rounded-full border border-white/10 px-2.5 py-1">
                 open source

@@ -5,9 +5,37 @@ export interface StoredCredentials {
 
 const GEMINI_KEY = "appbeam.gemini_api_key";
 const VERCEL_TOKEN = "appbeam.vercel_token";
+const SESSION_KEY = "appbeam.session_id";
 
 /** Fired after credentials change so dependent panels can refresh. */
 export const CREDENTIALS_EVENT = "appbeam:credentials-change";
+
+function randomId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+/**
+ * Stable per-browser session id — scopes "the visitor's current app" on the
+ * server (patch loop + export) so hosted multi-user instances never mix
+ * generated code between visitors.
+ */
+export function getSessionId(): string {
+  if (typeof window === "undefined") return "";
+  let id = window.localStorage.getItem(SESSION_KEY) ?? "";
+  if (!/^[A-Za-z0-9_-]{8,64}$/.test(id)) {
+    id = randomId();
+    window.localStorage.setItem(SESSION_KEY, id);
+  }
+  return id;
+}
+
+export function sessionHeader(): Record<string, string> {
+  const id = getSessionId();
+  return id ? { "x-appbeam-session": id } : {};
+}
 
 export function getStoredCredentials(): StoredCredentials {
   if (typeof window === "undefined") return { geminiKey: "", vercelToken: "" };
