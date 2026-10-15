@@ -39,6 +39,8 @@ export interface PipelineResult {
     model: string;
     codeBytes: number;
     durationMs: number;
+    /** Full generated App.tsx source — feeds the patch chat loop. */
+    code: string;
   };
   stages: StageRecord[];
   durationMs: number;
@@ -61,6 +63,23 @@ export interface DeployResult {
   url: string;
   deploymentId: string;
   projectName: string;
+}
+
+/** One patch inference pass: the complete updated source file. */
+export interface PatchResult {
+  code: string;
+  model: string;
+  durationMs: number;
+}
+
+/** Outcome of the prompt-to-patch loop (inference + inject + redeploy). */
+export interface PatchPipelineResult extends PatchResult {
+  /** True when a Vercel deployment actually ran (false = local mock deploy). */
+  deployed: boolean;
+  url: string;
+  deploymentId: string;
+  projectName: string;
+  entryFile: string;
 }
 
 export class PipelineError extends Error {

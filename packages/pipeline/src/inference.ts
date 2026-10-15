@@ -1,4 +1,5 @@
 import type { PipelineConfig } from "./config.js";
+import { callGeminiModel } from "./gemini.js";
 import type { InferenceResult } from "./types.js";
 
 export const SYSTEM_PROMPT = [
@@ -6,10 +7,15 @@ export const SYSTEM_PROMPT = [
   "",
   "Output contract:",
   "- Reply with exactly ONE fenced TypeScript code block containing App.tsx.",
-  "- The component must be self-contained: no imports from local files, no network calls.",
+  "- The component must be self-contained: no imports from local files, and no request may ever leave for a third-party backend.",
   "- Use only react, react-native, and expo-compatible APIs; render the recovered screens, navigation, state, and styling.",
   "- Target both iOS and web (react-native-web): safe-area padding, no native-only modules.",
-  "- Include a small in-memory mock of any data the original app fetched.",
+  "",
+  "API interception (mandatory whenever the evidence mentions external endpoints):",
+  "- Detect every external REST call the REA tool extracted — fetch(...), axios.get/post/put/delete, XMLHttpRequest — and never leave it pointing at a live server.",
+  "- Generate a lightweight mock handler layer inside the single file: inline dummy data objects shaped like the evidence's response envelopes, plus a route-matching shim (e.g. a mockFetch/mockClient wrapper) that intercepts those calls and resolves the fixtures immediately.",
+  "- Screens and buttons that depend on network data must return realistic data structures from the mock layer instead of failing: no CORS errors, no timeouts, no unhandled rejections.",
+  "- If no external endpoints were recovered, keep a small in-memory mock of any data the original app fetched.",
 ].join("\n");
 
 const FENCE_RE = /```(?:tsx|typescript|ts|jsx|javascript|js)?\s*\n([\s\S]*?)```/i;
@@ -172,46 +178,6 @@ const styles = StyleSheet.create({
 
 const MOCK_RAW = "```tsx\n" + MOCK_CODE + "\n```";
 
-async function sleep(ms: number): Promise<void> {
-  await new Promise((r) => setTimeout(r, ms));
-}
-
-async function callGemini(
-  config: PipelineConfig,
-  contents: string,
-): Promise<string> {
-  const { GoogleGenAI } = await import("@google/genai");
-  const ai = new GoogleGenAI({ apiKey: config.geminiApiKey ?? "" });
-
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    try {
-      const response = await ai.models.generateContent({
-        model: config.geminiModel,
-        contents,
-        config: {
-          systemInstruction: SYSTEM_PROMPT,
-          temperature: 0.2,
-        },
-      });
-      const text = response.text;
-      if (!text || text.trim() === "") {
-        throw new Error("Gemini returned an empty response");
-      }
-      return text;
-    } catch (err) {
-      lastError = err;
-      const retriable =
-        attempt === 1 &&
-        (err instanceof Error) &&
-        /429|500|503|overloaded|timeout|ECONNRESET/i.test(err.message);
-      if (!retriable) break;
-      await sleep(4_000);
-    }
-  }
-  throw lastError instanceof Error ? lastError : new Error(String(lastError));
-}
-
 /**
  * Stage 2 — Inference. Ship the REA payload to the Gemini Pro API with a
  * system prompt that converts reverse-engineered logic into Expo components.
@@ -240,10 +206,13 @@ export async function runInference(
     payload,
     config.geminiMaxPayloadChars,
   );
-  const raw = await callGemini(
-    config,
-    `Reverse-engineered evidence (markdown):\n\n${bounded}`,
-  );
+  const raw = await callGeminiModel({
+    apiKey: config.geminiApiKey,
+    model: config.geminiModel,
+    systemInstruction: SYSTEM_PROMPT,
+    contents: `Reverse-engineered evidence (markdown):\n\n${bounded}`,
+    temperature: 0.2,
+  });
 
   return {
     code: extractCode(raw),

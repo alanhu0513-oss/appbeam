@@ -3,7 +3,11 @@ import { randomUUID } from "node:crypto";
 import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { loadConfig, runPipeline } from "@appbeam/pipeline";
+import {
+  extractCredentialOverrides,
+  loadConfig,
+  runPipeline,
+} from "@appbeam/pipeline";
 import type { PipelineEvent, PipelineResult } from "@appbeam/pipeline/types";
 
 export const runtime = "nodejs";
@@ -23,9 +27,11 @@ function json(body: unknown, status = 200): Response {
 
 /**
  * GET /api/simulate — configuration presence (booleans only, never secrets).
+ * The dashboard forwards x-gemini-key / x-vercel-token headers, so the
+ * reported presence reflects the effective credentials (client or server).
  */
-export async function GET(): Promise<Response> {
-  const config = loadConfig();
+export async function GET(req: Request): Promise<Response> {
+  const config = loadConfig(extractCredentialOverrides(req.headers));
   return json({
     mode: config.mode,
     reaMode: config.reaMode,
@@ -85,6 +91,7 @@ export async function POST(req: Request): Promise<Response> {
       try {
         const result = await runPipeline({
           target: target!,
+          config: extractCredentialOverrides(req.headers),
           onEvent: (event) => send({ type: "event", event }),
         });
         send({ type: "done", result });

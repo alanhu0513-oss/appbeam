@@ -2,9 +2,12 @@
 
 import { useEffect, useState } from "react";
 
+import ApiConfig from "@/components/ApiConfig";
 import Dropzone, { type SubmitPayload } from "@/components/Dropzone";
+import PatchChat from "@/components/PatchChat";
 import PhoneFrame from "@/components/PhoneFrame";
 import StageTimeline from "@/components/StageTimeline";
+import { CREDENTIALS_EVENT, credentialHeaders } from "@/lib/api";
 import type { PipelineEvent, PipelineResult } from "@appbeam/pipeline/types";
 
 interface ConfigInfo {
@@ -85,12 +88,20 @@ export default function Home() {
   const [result, setResult] = useState<PipelineResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [liveUrl, setLiveUrl] = useState<string | null>(null);
+  const [appCode, setAppCode] = useState<string | null>(null);
+  const [refreshSignal, setRefreshSignal] = useState(0);
 
   useEffect(() => {
-    fetch("/api/simulate")
-      .then((r) => r.json())
-      .then((data: ConfigInfo) => setConfig(data))
-      .catch(() => setConfig(null));
+    const loadConfigInfo = () => {
+      fetch("/api/simulate", { headers: credentialHeaders() })
+        .then((r) => r.json())
+        .then((data: ConfigInfo) => setConfig(data))
+        .catch(() => setConfig(null));
+    };
+    loadConfigInfo();
+    window.addEventListener(CREDENTIALS_EVENT, loadConfigInfo);
+    return () => window.removeEventListener(CREDENTIALS_EVENT, loadConfigInfo);
   }, []);
 
   const submit = async ({ file, url }: SubmitPayload) => {
@@ -98,13 +109,19 @@ export default function Home() {
     setEvents([]);
     setResult(null);
     setError(null);
+    setLiveUrl(null);
+    setAppCode(null);
 
     const form = new FormData();
     if (file) form.append("file", file);
     if (url) form.append("url", url);
 
     try {
-      const res = await fetch("/api/simulate", { method: "POST", body: form });
+      const res = await fetch("/api/simulate", {
+        method: "POST",
+        body: form,
+        headers: credentialHeaders(),
+      });
       if (!res.ok || !res.body) {
         const payload = (await res.json().catch(() => null)) as
           | { error?: string }
@@ -121,6 +138,8 @@ export default function Home() {
           setEvents((prev) => [...prev, payload.event]);
         } else if (payload.type === "done") {
           setResult(payload.result);
+          setLiveUrl(payload.result.url || null);
+          setAppCode(payload.result.inference.code);
         } else if (payload.type === "error") {
           setError(payload.message);
         }
@@ -145,7 +164,20 @@ export default function Home() {
     }
   };
 
-  const liveUrl = result?.url || null;
+  const onPatchApplied = ({
+    code,
+    url,
+  }: {
+    code: string;
+    url: string | null;
+  }) => {
+    setAppCode(code);
+    if (url) {
+      setLiveUrl(url);
+      setRefreshSignal((n) => n + 1);
+    }
+  };
+
   const liveLabel = result
     ? result.effectiveMode === "real"
       ? `live · ${result.projectName} · ${result.deploymentId.slice(0, 12)}`
@@ -174,13 +206,22 @@ export default function Home() {
               </p>
             </div>
           </div>
-          <div className="hidden items-center gap-2 sm:flex">
-            <span className="label rounded-full border border-white/10 px-2.5 py-1">
-              open source
-            </span>
-            <span className="label rounded-full border border-white/10 px-2.5 py-1">
-              mcp · platforms api
-            </span>
+          <div className="flex items-center gap-2">
+            <a
+              className="ghost-btn"
+              href="/api/export"
+              title="Download the generated Expo project as a .zip — unpack and run npx expo start"
+            >
+              ⬇ export project
+            </a>
+            <div className="hidden items-center gap-2 sm:flex">
+              <span className="label rounded-full border border-white/10 px-2.5 py-1">
+                open source
+              </span>
+              <span className="label rounded-full border border-white/10 px-2.5 py-1">
+                mcp · platforms api
+              </span>
+            </div>
           </div>
         </div>
       </header>
@@ -209,10 +250,17 @@ export default function Home() {
             <Dropzone onSubmit={submit} busy={busy} />
             <StageTimeline events={events} />
             <ConfigCard config={config} />
+            <ApiConfig />
           </div>
 
-          <div className="lg:sticky lg:top-24 lg:self-start">
-            <PhoneFrame url={liveUrl} loading={busy} liveLabel={liveLabel} />
+          <div className="flex flex-col gap-6">
+            <PhoneFrame
+              url={liveUrl}
+              loading={busy}
+              liveLabel={liveLabel}
+              refreshSignal={refreshSignal}
+            />
+            <PatchChat appCode={appCode} onApplied={onPatchApplied} />
 
             {result ? (
               <div className="glass mt-6 p-5">

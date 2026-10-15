@@ -33,7 +33,7 @@ flowchart LR
 | Stage | What happens | Where |
 | --- | --- | --- |
 | ① **Intake** | The target is fed to `rea analyze` (terminal) or the REA **MCP server** over stdio; the returned evidence layout ships downstream. | `packages/pipeline/src/intake.ts` |
-| ② **Inference** | The evidence payload is sent to the Gemini API (`@google/genai`) with the system prompt *"Convert this reverse-engineered logic into standalone production-ready Expo React Native Web components."* | `packages/pipeline/src/inference.ts` |
+| ② **Inference** | The evidence payload is sent to the Gemini API (`@google/genai`) with a system prompt that converts the logic into a single Expo React Native Web `App.tsx` — and, whenever the evidence shows `fetch`/`axios` endpoints, generates an **in-file mock handler layer** (inline fixtures + a route-matching shim) so cloned UIs never hit dead backends. | `packages/pipeline/src/inference.ts` |
 | ③ **Injection** | Gemini's raw output (fences stripped, contract-validated) overwrites `App.tsx` inside `apps/simulator-template` — optionally into a per-run staging copy. | `packages/pipeline/src/inject.ts` |
 | ④ **Deployment** | The mutated template is **zipped as an artifact**, pushed to Vercel (inline ≤2.5 MB, else the `/v2/files` upload API), and a production deployment is created + polled to `READY`. | `packages/pipeline/src/vercel.ts` |
 
@@ -90,6 +90,26 @@ cp .env.example .env
 docker compose up dashboard                      # http://localhost:3000
 docker compose run pipeline simulate /workspace/app.apk   # files from ./samples
 ```
+
+## Dashboard features
+
+- **Bring your own keys** — the **04 · api configuration** panel stores your
+  `GEMINI_API_KEY` / `VERCEL_AUTH_TOKEN` in the browser's `localStorage` and
+  sends them as `x-gemini-key` / `x-vercel-token` headers on every request.
+  The pipeline prefers client headers and falls back to server `.env` values;
+  nothing is persisted server-side.
+- **Patch terminal (iterative vibecoding)** — the **05 · patch terminal**
+  chat next to the phone frame sends the current `App.tsx` plus a
+  natural-language request ("make the theme dark mode") to
+  `POST /api/patch-code`; Gemini returns the complete updated file, which is
+  re-injected and **redeployed to the same Vercel project** — the iframe
+  refreshes against the live URL.
+- **API mocking by default** — generated apps intercept recovered
+  `fetch`/`axios` calls behind an in-file mock layer, so buttons backed by
+  third-party REST endpoints render realistic data instead of failing.
+- **Export project** — the nav-bar **⬇ export project** button streams the
+  current `apps/simulator-template` (patched `App.tsx` included) as a clean
+  `.zip`; unpack it and run `npx expo start` or `npm run web`.
 
 ## Configure the Google Gemini API key
 
@@ -194,6 +214,19 @@ curl -X POST http://localhost:3000/api/simulate \
   -F file=@samples/app.apk
 # data: {"type":"event","event":{"stage":"intake","status":"running",…}}
 # data: {"type":"done","result":{"url":"https://….vercel.app",…}}
+
+# bring your own credentials (override server .env per request)
+curl -H "x-gemini-key: AIza…" -H "x-vercel-token: vercel_…" \
+  http://localhost:3000/api/simulate
+
+# iterative patch loop: full updated App.tsx + redeploy
+curl -X POST http://localhost:3000/api/patch-code \
+  -H "Content-Type: application/json" \
+  -H "x-gemini-key: AIza…" -H "x-vercel-token: vercel_…" \
+  -d '{"code":"…current App.tsx…","request":"make the theme dark mode"}'
+
+# download the generated Expo project as a .zip
+curl -OJ http://localhost:3000/api/export
 ```
 
 ## Scripts

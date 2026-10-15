@@ -1,17 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function PhoneFrame({
   url,
   loading,
   liveLabel,
+  refreshSignal = 0,
 }: {
   url: string | null;
   loading: boolean;
   liveLabel: string;
+  /** Bump this to force the iframe to reload (patch redeployed). */
+  refreshSignal?: number;
 }) {
   const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    if (refreshSignal > 0) setReloadKey((k) => k + 1);
+  }, [refreshSignal]);
 
   return (
     <div className="flex flex-col items-center gap-5">

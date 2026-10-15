@@ -1,22 +1,10 @@
-import { ZipArchive } from "archiver";
 import { createHash } from "node:crypto";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { findRepoRoot } from "./config.js";
+import { walkFiles, zipFiles, type ArchiveFile } from "./archive.js";
 
 const API = "https://api.vercel.com";
-
-const SKIP_DIRS = new Set([
-  "node_modules",
-  ".git",
-  ".expo",
-  ".next",
-  ".turbo",
-  ".appbeam",
-  "dist",
-  "coverage",
-]);
-const SKIP_FILES = new Set([".DS_Store", ".env", ".env.local"]);
 
 export interface DeployOptions {
   sourceDir: string;
@@ -41,9 +29,7 @@ export interface DeployOutcome {
   artifactPath: string | null;
 }
 
-interface PushFile {
-  file: string;
-  data: Buffer;
+interface PushFile extends ArchiveFile {
   sha1: string;
   size: number;
 }
@@ -51,41 +37,12 @@ interface PushFile {
 /** Total raw bytes below which we inline files (base64 inflates ~4/3). */
 const INLINE_LIMIT_BYTES = 2_500_000;
 
-async function walk(root: string, prefix = ""): Promise<PushFile[]> {
-  const entries = await readdir(join(root, prefix), { withFileTypes: true });
-  const files: PushFile[] = [];
-  for (const entry of entries) {
-    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
-    if (entry.isDirectory()) {
-      if (SKIP_DIRS.has(entry.name)) continue;
-      files.push(...(await walk(root, rel)));
-    } else if (entry.isFile()) {
-      if (SKIP_FILES.has(entry.name)) continue;
-      const data = await readFile(join(root, rel));
-      files.push({
-        file: rel,
-        data,
-        sha1: createHash("sha1").update(data).digest("hex"),
-        size: data.byteLength,
-      });
-    }
-  }
-  return files;
-}
-
-async function zipFiles(files: PushFile[]): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const archive = new ZipArchive({ zlib: { level: 9 } });
-    const chunks: Buffer[] = [];
-    archive.on("data", (chunk: Buffer) => chunks.push(chunk));
-    archive.on("warning", () => undefined);
-    archive.on("error", (err) => reject(err));
-    archive.on("end", () => resolve(Buffer.concat(chunks)));
-    for (const file of files) {
-      archive.append(file.data, { name: file.file });
-    }
-    void archive.finalize();
-  });
+async function walk(root: string): Promise<PushFile[]> {
+  return (await walkFiles(root)).map((file) => ({
+    ...file,
+    sha1: createHash("sha1").update(file.data).digest("hex"),
+    size: file.data.byteLength,
+  }));
 }
 
 interface VercelError {
