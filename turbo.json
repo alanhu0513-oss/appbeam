@@ -1,0 +1,37 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalPassThroughEnv": [
+    "GEMINI_API_KEY",
+    "GEMINI_MODEL",
+    "GEMINI_MAX_PAYLOAD_CHARS",
+    "VERCEL_TOKEN",
+    "VERCEL_TEAM_ID",
+    "VERCEL_PROJECT_NAME",
+    "VERCEL_DEPLOY_TIMEOUT_MS",
+    "PIPELINE_MODE",
+    "PIPELINE_STAGING",
+    "REA_MODE",
+    "REA_COMMAND",
+    "REA_ARGS",
+    "REA_TIMEOUT_MS",
+    "SIMULATOR_TEMPLATE_DIR",
+    "SIMULATOR_ENTRY_FILE"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
+    },
+    "dev": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true
+    },
+    "typecheck": {
+      "dependsOn": ["^build"]
+    },
+    "start": {
+      "cache": false
+    }
+  }
+}

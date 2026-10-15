@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.next/
+.expo/
+.turbo/
+.appbeam/
+*.tsbuildinfo
+
+.env
+.env.local
+.env.*.local
+
+.DS_Store
+*.log
+coverage/
+
+apps/dashboard/public/*.local

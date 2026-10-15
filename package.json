@@ -1,0 +1,22 @@
+{
+  "name": "appbeam",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Open-source platform that hosts live mobile & desktop apps: upload a binary or app URL, reverse-engineer it with REA, reimagine it with Gemini, and beam it live to Vercel inside a device frame.",
+  "license": "MIT",
+  "packageManager": "pnpm@12.5.1",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "typecheck": "turbo typecheck",
+    "pipeline": "pnpm --filter @appbeam/pipeline start",
+    "docker:up": "docker compose up"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.4",
+    "typescript": "^5.9.3"
+  }
+}
